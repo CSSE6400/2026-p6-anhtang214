@@ -57,6 +57,7 @@ resource "aws_ecs_service" "taskoverflow" {
     assign_public_ip    = true
   }
 
+  # Associate the Target Group with AWS service
   load_balancer {
     target_group_arn = aws_lb_target_group.taskoverflow.arn
     container_name = "taskoverflow"

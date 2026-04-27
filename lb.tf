@@ -1,3 +1,4 @@
+# Target Group -- sends traffic to instances --> Fargate Instances
 resource "aws_lb_target_group" "taskoverflow" {
     name = "taskoverflow"
     port = 6400
@@ -6,7 +7,7 @@ resource "aws_lb_target_group" "taskoverflow" {
     target_type = "ip"
 
     health_check {
-        path = "api/v1/health"
+        path = "/api/v1/health"
         port = "6400"
         protocol = "HTTP"
         healthy_threshold = 2
@@ -16,14 +17,16 @@ resource "aws_lb_target_group" "taskoverflow" {
     }
 }
 
+# External Application Load Balancer — publicly accessible, routes traffic to target group
 resource "aws_lb" "taskoverflow" {
     name = "taskoverflow"
-    internal = false
-    load_balancer_type = "application"
-    subnets = data.aws_subnets.private.ids
+    internal = false                            # false = internet-facing
+    load_balancer_type = "application"          # Layer 7 (HTTP/HTTPS)
+    subnets = data.aws_subnets.private.ids      # subnets the ALB spans across
     security_groups = [aws_security_group.taskoverflow_lb.id]
 }
 
+# Firewall controlling what traffic can reach to ALB
 resource "aws_security_group" "taskoverflow_lb" {
     name = "taskoverflow_lb"
     description = "TaskOverFlow Load Balancer Security Group"
@@ -32,14 +35,14 @@ resource "aws_security_group" "taskoverflow_lb" {
         from_port = 80
         to_port = 80
         protocol = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
+        cidr_blocks = ["0.0.0.0/0"] # allow HTTP from anywhere (internet)
     }
 
     egress {
         from_port = 0
         to_port = 0
-        protocol = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
+        protocol = "-1"                 # -1 = all protocols
+        cidr_blocks = ["0.0.0.0/0"]     # allow outbound to target group nodes
     }
 
     tags = {
@@ -47,17 +50,19 @@ resource "aws_security_group" "taskoverflow_lb" {
     }
 }
 
+# Listener - entry point for the ALB, forwards incoming HTTP traffic to the target group
 resource "aws_lb_listener" "taskoverflow" {
-    load_balancer_arn = aws_lb.taskoverflow.arn
+    load_balancer_arn = aws_lb.taskoverflow.arn     # attach to our ALB
     port = "80"
     protocol = "HTTP"
 
     default_action {
-        type = "forward"
+        type = "forward"        # forward to target group (not redirect/fixed-response)
         target_group_arn = aws_lb_target_group.taskoverflow.arn
     }
 }
 
+# Output the ALB's DNS name after `terraform apply` — use this to send requests to the service
 output "taskoverflow_dns_name" {
     value = aws_lb.taskoverflow.dns_name
     description = "DNS name of the TaskOverflow load balancer."
